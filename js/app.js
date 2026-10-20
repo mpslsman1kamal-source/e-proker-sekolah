@@ -74,23 +74,41 @@ function renderSidebarMenu(user) {
   const nav = document.getElementById('sidebar-nav');
   const items = MENU_BY_ROLE[user.peran] || [];
   nav.innerHTML = items.map(m => `
-    <div class="nav-item" data-route="${m.id}" onclick="navigateTo('${m.id}')">
+    <a class="nav-item" data-route="${m.id}" onclick="navigateTo('${m.id}')">
       <span class="mi">${m.icon}</span><span>${escapeHtml(m.label)}</span>
-    </div>`).join('');
+    </a>`).join('');
+}
+
+const ROLE_INISIAL = { 'Superadmin': 'SA', 'Kepala Sekolah': 'KS', 'Bendahara': 'BN', 'Staf': 'ST', 'Waka/Koordinator': 'WK' };
+function inisialAvatar(user) {
+  const bagian = (user.nama || '').trim().split(/\s+/);
+  return (bagian[0] ? bagian[0][0] : '') + (bagian[1] ? bagian[1][0] : (bagian[0] ? bagian[0][1] || '' : ''));
 }
 
 function navigateTo(route, param) {
   currentRoute = route; currentRouteParam = param || null;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.route === route));
-  document.getElementById('page-title').textContent = PAGE_TITLE[route] || route;
   document.getElementById('sidebar').classList.remove('open');
   renderPage(route, param);
+}
+
+/** Bar judul halaman di dalam konten (meniru "TOP BAR CONTROL" tiap layar Stitch). */
+function pageHeaderBar(title) {
+  return `<div class="flex items-center justify-between" style="background:var(--surface);padding:var(--space-md) var(--space-lg);box-shadow:var(--shadow-sm);margin-bottom:var(--space-lg);flex-wrap:wrap;gap:8px;">
+    <h2 style="font-size:22px;font-weight:800;color:var(--ink);letter-spacing:-0.01em;">${escapeHtml(title)}</h2>
+    <span class="field-hint" style="background:var(--surface-1);padding:3px 8px;">[SYS.RUNNING: ${escapeHtml((currentRoute || '').toUpperCase())}]</span>
+  </div>`;
 }
 
 function renderPage(route, param) {
   const user = Store.getUser();
   const content = document.getElementById('page-content');
-  content.innerHTML = '<div class="empty-state">Memuat...</div>';
+  content.innerHTML = pageHeaderBar(PAGE_TITLE[route] || route) + '<div id="page-body"><div class="empty-state">Memuat...</div></div>';
+  const bodyEl = document.getElementById('page-body');
+  return renderPageBody(route, param, user, bodyEl);
+}
+
+function renderPageBody(route, param, user, content) {
 
   switch (route) {
     case 'dashboard': return renderDashboard(user, content);
@@ -117,6 +135,8 @@ async function bootApp() {
   document.getElementById('view-login').classList.add('hidden');
   document.getElementById('view-app').classList.remove('hidden');
   document.getElementById('sidebar-user-nama').textContent = user.nama;
+  document.getElementById('sidebar-user-avatar').textContent = inisialAvatar(user).toUpperCase();
+  document.getElementById('sidebar-user-avatar').style.background = warnaPeran(user.peran);
   document.getElementById('sidebar-user-role').innerHTML = '<span class="role-tag">' + escapeHtml(user.peran) + '</span>';
   renderSidebarMenu(user);
 

@@ -54,9 +54,21 @@ async function renderDashboard(user, content) {
   content.innerHTML = html || '<div class="empty-state">Belum ada data.</div>';
 }
 
+const STAT_PALETTE = ['#2563EB', '#D97706', '#059669', '#DC2626', '#0D9488', '#7C3AED'];
+
 function statGrid(pairs) {
   return '<div class="stat-grid" style="margin-bottom:var(--space-lg);">' +
-    pairs.map(([label, val]) => `<div class="stat-card"><div class="stat-label">${escapeHtml(label)}</div><div class="stat-value">${val}</div></div>`).join('') +
+    pairs.map(([label, val], i) => {
+      const warna = STAT_PALETTE[i % STAT_PALETTE.length];
+      return `<div class="stat-card">
+        <div class="stat-strip" style="background:${warna};"></div>
+        <div class="stat-body">
+          <span class="stat-label" style="background:${warna}1A;color:${warna};">${escapeHtml(label)}</span>
+          <span class="stat-value" style="color:var(--ink);">${val}</span>
+        </div>
+        <div class="stat-footer" style="background:var(--surface-1);color:#434655;"><span>UNIT</span><span>REALTIME</span></div>
+      </div>`;
+    }).join('') +
     '</div>';
 }
 

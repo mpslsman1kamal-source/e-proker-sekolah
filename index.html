@@ -42,25 +42,35 @@
 <!-- ===================== APP SHELL ===================== -->
 <div id="view-app" class="app-shell hidden">
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
-      <div class="logo-box"><span>[EPS]</span></div>
-      <h1>E-Proker</h1>
-      <p>SMAN 1 Kamal Bangkalan</p>
+    <div>
+      <div class="sidebar-brand" id="sidebar-user-block">
+        <div class="flex items-center gap-sm" style="margin-bottom:4px;">
+          <span class="avatar-chip" id="sidebar-user-avatar"></span>
+          <div style="min-width:0;">
+            <div id="sidebar-user-nama" style="font-weight:700;color:#fff;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+            <div id="sidebar-user-role"></div>
+          </div>
+        </div>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav"></nav>
     </div>
-    <nav class="sidebar-nav" id="sidebar-nav"></nav>
     <div class="sidebar-user">
-      <div id="sidebar-user-nama" style="font-weight:700;"></div>
-      <div id="sidebar-user-role"></div>
-      <button class="btn btn-secondary btn-sm" style="margin-top:10px;width:100%;" onclick="logout()">KELUAR</button>
+      <a class="nav-item" style="margin:0 -16px;color:#FCA5A5;" onclick="logout()"><span class="mi">power_settings_new</span><span>[X] Keluar / Logout</span></a>
     </div>
   </aside>
   <div class="main">
     <div class="topbar">
       <div class="flex items-center gap-sm">
         <button class="btn btn-secondary btn-sm menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')"><span class="mi">menu</span></button>
-        <h2 id="page-title">Dashboard</h2>
+        <span class="app-logo">E</span>
+        <div>
+          <h2 id="page-title" style="font-size:14px;">E-PROKER SEKOLAH</h2>
+          <span class="field-hint" id="topbar-tahun">TA —</span>
+        </div>
       </div>
-      <div class="tech-strip" style="border:none;padding:0;"><span id="topbar-tahun">TA —</span></div>
+      <div class="flex items-center gap-md">
+        <span class="mi" style="color:var(--ink);">notifications</span>
+      </div>
     </div>
     <div class="content" id="page-content"></div>
   </div>
