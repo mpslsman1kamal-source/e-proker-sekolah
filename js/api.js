@@ -13,25 +13,108 @@ const Store = {
   clearUser() { localStorage.removeItem('eproker_user'); }
 };
 
-/** Panggil action ke backend (GET untuk data publik 'login'/'ping', selain itu lewat POST+token). */
-async function api(action, data) {
+// ============================================
+// PERFORMA (gas-scale-turbo): cache SWR untuk aksi baca, timeout, deteksi respons non-JSON
+// ============================================
+const _swrCache = {};
+// TTL (ms) khusus aksi BACA yang aman di-cache sebentar agar pindah menu terasa instan.
+// Aksi TULIS (tidak ada di daftar ini) selalu membersihkan seluruh cache baca setelah sukses.
+const SWR_TTL = {
+  prokerList: 20000, prokerDetail: 15000,
+  dashboardSuperadmin: 20000, dashboardKepsek: 20000, dashboardBendahara: 20000, dashboardPemilik: 20000,
+  penggunaList: 20000, penugasanList: 20000, bidangList: 300000, tahunAjaranList: 300000,
+  pengaturanGet: 60000, logNotifikasiList: 15000, perubahanAntreanList: 15000, anggaranList: 15000
+};
+
+/**
+ * Satu kali percobaan fetch ke backend.
+ * Mengembalikan { ok:false, retryable:true, ... } untuk kegagalan di level TRANSPORT
+ * (fetch gagal / respons bukan JSON) — ini aman dicoba ulang karena kemungkinan besar
+ * permintaan belum sempat diproses logika server sama sekali (gejala cold-start GAS).
+ * Kegagalan LOGIKA (server sukses merespons tapi success:false, mis. salah kata sandi)
+ * selalu ok:true — TIDAK pernah dicoba ulang otomatis.
+ */
+async function apiSekaliPanggil(action, data) {
+  const t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+  const controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 25000) : null;
   try {
     const res = await fetch(GAS_URL, {
       method: 'POST',
       // WAJIB text/plain — JSON memicu CORS preflight yang diblok GAS
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, data: data || {}, token: Store.getToken() })
+      body: JSON.stringify({ action, data: data || {}, token: Store.getToken() }),
+      signal: controller ? controller.signal : undefined
     });
-    const json = await res.json();
-    if (json.success === false && /Sesi/.test(json.message || '')) {
-      Store.clearToken(); Store.clearUser();
-      renderLogin(json.message);
+    const teks = await res.text();
+    try {
+      const json = JSON.parse(teks);
+      if (window.console && typeof json.ms === 'number') {
+        const totalMs = Math.round(((window.performance && performance.now) ? performance.now() : Date.now()) - t0);
+        console.debug('[api] ' + action + ' — server ' + json.ms + 'ms, total ' + totalMs + 'ms');
+      }
+      return { ok: true, json };
+    } catch (eParse) {
+      console.error('Respons server bukan JSON untuk aksi "' + action + '":', teks.slice(0, 300));
+      return { ok: false, retryable: true, pesan: 'Server tidak merespons dengan benar.' };
     }
-    return json;
   } catch (err) {
-    showToast('Gagal menghubungi server: ' + err.message, 'error');
-    return { success: false, message: err.message };
+    const abort = err && err.name === 'AbortError';
+    return {
+      ok: false,
+      retryable: !abort, // timeout 25dtk biasanya berarti server benar-benar berat, tidak perlu diulang otomatis
+      pesan: abort ? 'Server lambat merespons (lebih dari 25 detik).' : 'Gagal menghubungi server: ' + err.message
+    };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
+}
+
+function tungguSebentar(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+/** Panggil action ke backend — cache SWR untuk aksi baca, timeout, dan 1x percobaan ulang otomatis bila transport gagal. */
+async function api(action, data, opts) {
+  opts = opts || {};
+  const ttl = SWR_TTL[action];
+  const cacheKey = ttl ? action + '::' + JSON.stringify(data || {}) : null;
+  if (cacheKey && !opts.fresh) {
+    const hit = _swrCache[cacheKey];
+    if (hit && Date.now() - hit.ts < ttl) return hit.data;
+  }
+
+  let hasil = await apiSekaliPanggil(action, data);
+  if (!hasil.ok && hasil.retryable) {
+    await tungguSebentar(1500); // jeda singkat — beri waktu Apps Script "bangun" dari cold-start
+    hasil = await apiSekaliPanggil(action, data);
+  }
+
+  if (!hasil.ok) {
+    const pesan = hasil.pesan + ' Sudah dicoba ulang otomatis — coba lagi beberapa saat, atau muat ulang halaman (Ctrl+Shift+R).';
+    showToast(pesan, 'error');
+    return { success: false, message: pesan };
+  }
+
+  const json = hasil.json;
+  if (json.success === false && /Sesi/.test(json.message || '')) {
+    Store.clearToken(); Store.clearUser();
+    renderLogin(json.message);
+  }
+
+  if (json && json.success !== false) {
+    if (cacheKey) _swrCache[cacheKey] = { ts: Date.now(), data: json };
+    else if (!ttl) Object.keys(_swrCache).forEach(k => delete _swrCache[k]); // aksi tulis sukses -> cache baca dibersihkan
+  }
+  return json;
+}
+
+/** Ping ringan ke server (tanpa menunggu hasil) agar instance Apps Script tetap hangat — gas-scale-turbo §4.7. */
+function warmUpServer() {
+  try {
+    const terakhir = Number(sessionStorage.getItem('eproker_warm_ts') || 0);
+    if (Date.now() - terakhir < 4 * 60 * 1000) return;
+    sessionStorage.setItem('eproker_warm_ts', String(Date.now()));
+    fetch(GAS_URL + '?w=1', { mode: 'no-cors' }).catch(() => {});
+  } catch (e) {}
 }
 
 // ============================================

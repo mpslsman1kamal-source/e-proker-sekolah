@@ -2,9 +2,11 @@
 // KELOLA PENGGUNA — US-01
 // ============================================
 async function renderPengguna(user, content) {
+  const epoch = renderEpochSaatIni();
   showLoading(true);
   const res = await api('penggunaList', {});
   showLoading(false);
+  if (!masihRenderAktif(epoch)) return;
   if (!res.success) return (content.innerHTML = errBox(res.message));
 
   content.innerHTML = `<div class="card">
@@ -72,9 +74,11 @@ async function toggleAktifPengguna(id) {
 // PENUGASAN STAF — US-02
 // ============================================
 async function renderPenugasan(user, content) {
+  const epoch = renderEpochSaatIni();
   showLoading(true);
   const [penugasan, pengguna] = await Promise.all([api('penugasanList', {}), api('penggunaList', {})]);
   showLoading(false);
+  if (!masihRenderAktif(epoch)) return;
   if (!penugasan.success) return (content.innerHTML = errBox(penugasan.message));
 
   const stafOpsi = pengguna.data.filter(p => p.peran === 'Staf').map(p => `<option value="${p.id_pengguna}">${escapeHtml(p.nama)}</option>`).join('');
@@ -113,9 +117,11 @@ async function simpanPenugasanBaru() {
 // PENGATURAN — tahun ajaran, bidang, program, templat WA (PRD 2.3)
 // ============================================
 async function renderPengaturan(user, content) {
+  const epoch = renderEpochSaatIni();
   showLoading(true);
   const [pengaturan, bidang] = await Promise.all([api('pengaturanGet', {}), api('bidangList', {})]);
   showLoading(false);
+  if (!masihRenderAktif(epoch)) return;
   if (!pengaturan.success) return (content.innerHTML = errBox(pengaturan.message));
   const nilai = pengaturan.data;
 
@@ -188,9 +194,11 @@ async function tambahBidangBaru() {
 // LOG NOTIFIKASI WHATSAPP
 // ============================================
 async function renderLogNotif(user, content) {
+  const epoch = renderEpochSaatIni();
   showLoading(true);
   const res = await api('logNotifikasiList', {});
   showLoading(false);
+  if (!masihRenderAktif(epoch)) return;
   if (!res.success) return (content.innerHTML = errBox(res.message));
 
   content.innerHTML = `<div class="card"><div class="card-header"><h3>Log Notifikasi WhatsApp (500 terbaru)</h3></div>

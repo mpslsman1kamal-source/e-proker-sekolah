@@ -1,5 +1,7 @@
 async function bukaModalAnggaran(idProker, idKegiatanDefault) {
+  const epoch = renderEpochSaatIni();
   const det = await api('prokerDetail', { id_proker: idProker });
+  if (!masihRenderAktif(epoch)) return; // pengguna sudah pindah halaman — jangan munculkan modal basi
   if (!det.success) return showToast(det.message, 'error');
   const opsiKegiatan = det.data.kegiatan.map(k => `<option value="${k.id_kegiatan}" ${k.id_kegiatan === idKegiatanDefault ? 'selected' : ''}>${escapeHtml(k.nama_kegiatan)}</option>`).join('');
 

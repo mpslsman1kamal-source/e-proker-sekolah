@@ -1,10 +1,12 @@
 async function renderDashboard(user, content) {
+  const epoch = renderEpochSaatIni(); // batalkan tulis ke DOM bila pengguna sudah pindah halaman
   showLoading(true);
   let html = '';
 
   if (user.peran === 'Superadmin') {
     const res = await api('dashboardSuperadmin', {});
     showLoading(false);
+    if (!masihRenderAktif(epoch)) return;
     if (!res.success) return (content.innerHTML = errBox(res.message));
     const d = res.data;
     html += statGrid([
@@ -24,6 +26,7 @@ async function renderDashboard(user, content) {
   } else if (user.peran === 'Kepala Sekolah') {
     const res = await api('dashboardKepsek', {});
     showLoading(false);
+    if (!masihRenderAktif(epoch)) return;
     if (!res.success) return (content.innerHTML = errBox(res.message));
     const d = res.data;
     html += statGrid([
@@ -35,6 +38,7 @@ async function renderDashboard(user, content) {
   } else if (user.peran === 'Bendahara') {
     const res = await api('dashboardBendahara', {});
     showLoading(false);
+    if (!masihRenderAktif(epoch)) return;
     if (!res.success) return (content.innerHTML = errBox(res.message));
     const d = res.data;
     html += statGrid([['Proker Belum Dianggarkan', d.proker_belum_dianggarkan]]);
@@ -43,6 +47,7 @@ async function renderDashboard(user, content) {
   } else {
     const res = await api('dashboardPemilik', {});
     showLoading(false);
+    if (!masihRenderAktif(epoch)) return;
     if (!res.success) return (content.innerHTML = errBox(res.message));
     const d = res.data;
     const rekap = d.rekap_status;

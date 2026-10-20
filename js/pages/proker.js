@@ -4,20 +4,26 @@
 let _prokerCache = [];
 
 async function renderProkerList(user, content, filterAwal) {
+  const epoch = renderEpochSaatIni();
   showLoading(true);
   const res = await api('prokerList', filterAwal || {});
   showLoading(false);
+  if (!masihRenderAktif(epoch)) return; // pengguna sudah pindah halaman — batalkan render basi
   if (!res.success) return (content.innerHTML = errBox(res.message));
   _prokerCache = res.data;
 
   const bisaBuat = user.peran === 'Waka/Koordinator';
   const bidangOpsi = AppState.bidang.map(b => `<option value="${b.id_bidang}">${escapeHtml(b.nama_bidang)}</option>`).join('');
+  const adaYangBisaDiajukan = bisaBuat && _prokerCache.some(p => ['Draft', 'Ditolak'].indexOf(p.status) !== -1 && !p.terkunci);
 
   content.innerHTML = `
     <div class="card">
       <div class="card-header">
         <h3>${escapeHtml(PAGE_TITLE[currentRoute] || 'Daftar Proker')}</h3>
-        ${bisaBuat ? `<button class="btn btn-primary btn-sm" onclick="navigateTo('proker-form')"><span class="mi" style="font-size:14px;">add</span>Proker Baru</button>` : ''}
+        <div class="flex gap-sm">
+          ${adaYangBisaDiajukan ? `<button class="btn btn-secondary btn-sm" onclick="ajukanSemuaProker()"><span class="mi" style="font-size:14px;">forward_to_inbox</span>Ajukan Semua ke Kepala Sekolah</button>` : ''}
+          ${bisaBuat ? `<button class="btn btn-primary btn-sm" onclick="navigateTo('proker-form')"><span class="mi" style="font-size:14px;">add</span>Proker Baru</button>` : ''}
+        </div>
       </div>
       <div class="table-toolbar">
         <input type="text" id="filter-cari" placeholder="Cari judul proker...">
@@ -74,6 +80,7 @@ function renderProkerRows(list) {
 let _kegiatanRows = [];
 
 async function renderProkerForm(user, content, idProker) {
+  const epoch = renderEpochSaatIni();
   let proker = null, kegiatanAwal = [];
   const draftKey = 'eproker_draft_' + (idProker || 'baru');
 
@@ -81,6 +88,7 @@ async function renderProkerForm(user, content, idProker) {
     showLoading(true);
     const res = await api('prokerDetail', { id_proker: idProker });
     showLoading(false);
+    if (!masihRenderAktif(epoch)) return;
     if (!res.success) return (content.innerHTML = errBox(res.message));
     proker = res.data.proker; kegiatanAwal = res.data.kegiatan;
     if (['Draft', 'Ditolak'].indexOf(proker.status) === -1) {
@@ -203,9 +211,11 @@ async function simpanDraftProker(idProker) {
 // DETAIL PROKER — alur ajukan / validasi / revisi / perubahan / cetak
 // ============================================
 async function renderProkerDetail(user, content, idProker) {
+  const epoch = renderEpochSaatIni();
   showLoading(true);
   const res = await api('prokerDetail', { id_proker: idProker });
   showLoading(false);
+  if (!masihRenderAktif(epoch)) return;
   if (!res.success) return (content.innerHTML = errBox(res.message));
   const d = res.data, p = d.proker;
   const bidang = AppState.bidang.find(b => b.id_bidang === p.id_bidang);
@@ -284,6 +294,16 @@ async function ajukanProker(idProker) {
   if (res.success) navigateTo('proker-detail', idProker);
 }
 
+/** FITUR BARU: ajukan sekaligus semua proker milik Waka yang berstatus Draft/Ditolak (selain ajukan per-proker). */
+async function ajukanSemuaProker() {
+  if (!confirm('Ajukan SEMUA proker Anda yang berstatus Draft/Ditolak sekaligus ke Kepala Sekolah?\n\nProker tanpa kegiatan atau yang sedang terkunci akan dilewati otomatis.')) return;
+  showLoading(true);
+  const res = await api('prokerAjukanSemua', {});
+  showLoading(false);
+  showToast(res.message, res.success ? 'success' : 'error');
+  if (res.success) navigateTo('proker-list');
+}
+
 function bukaModalValidasi(idProker, keputusan) {
   openModal(keputusan === 'Diterima' ? 'Terima Proker' : 'Tolak Proker', `
     <div class="field"><label>Catatan ${keputusan === 'Ditolak' ? '<span class="req">[WAJIB]</span>' : '(opsional)'}</label>
@@ -345,24 +365,22 @@ async function kirimPerubahan(idProker) {
 
 // ============================================
 // ANTREAN PERUBAHAN (Kepala Sekolah) — US-11
+// PERFORMA: dulu memanggil prokerDetail() berulang per proker (N+1 — gas-scale-turbo gejala I).
+// Sekarang 1x panggilan server lewat route gabungan perubahanAntreanList.
 // ============================================
 async function renderAntreanPerubahan(user, content) {
+  const epoch = renderEpochSaatIni();
   showLoading(true);
-  const res = await api('prokerList', {});
+  const res = await api('perubahanAntreanList', {});
   showLoading(false);
+  if (!masihRenderAktif(epoch)) return;
   if (!res.success) return (content.innerHTML = errBox(res.message));
-
-  const rows = [];
-  for (const p of res.data) {
-    const det = await api('prokerDetail', { id_proker: p.id_proker });
-    if (det.success) det.data.perubahan.filter(c => c.status === 'Diajukan').forEach(c => rows.push({ p, c }));
-  }
 
   content.innerHTML = `<div class="card"><div class="card-header"><h3>Antrean Pengajuan Perubahan</h3></div>
     <div class="table-wrap"><table class="data-table">
       <thead><tr><th>Proker</th><th>Uraian Perubahan</th><th>Alasan</th><th>Waktu</th><th></th></tr></thead>
-      <tbody>${rows.length ? rows.map(({ p, c }) => `
-        <tr><td>${escapeHtml(p.judul)}</td><td>${escapeHtml(c.uraian_perubahan)}</td><td>${escapeHtml(c.alasan)}</td><td>${fmtTanggal(c.waktu)}</td>
+      <tbody>${res.data.length ? res.data.map(c => `
+        <tr><td>${escapeHtml(c.judul_proker)}</td><td>${escapeHtml(c.uraian_perubahan)}</td><td>${escapeHtml(c.alasan)}</td><td>${fmtTanggal(c.waktu)}</td>
         <td class="flex gap-sm">
           <button class="btn btn-primary btn-sm" onclick="putuskanPerubahan('${c.id_perubahan}','Disetujui')">Setujui</button>
           <button class="btn btn-danger btn-sm" onclick="putuskanPerubahan('${c.id_perubahan}','Ditolak')">Tolak</button>

@@ -100,8 +100,20 @@ function pageHeaderBar(title) {
   </div>`;
 }
 
+/**
+ * PENJAGA RENDER BASI (perbaikan bug race condition — bukan perubahan tampilan):
+ * Setiap pindah halaman menaikkan _renderEpoch. Halaman async (fetch lama yang baru
+ * selesai setelah pengguna sudah pindah menu) wajib mengecek masihRenderAktif(epoch)
+ * sebelum menyentuh DOM — kalau sudah basi, batalkan render tanpa error alih-alih
+ * menulis ke elemen yang sudah tidak ada ("Cannot set properties of null").
+ */
+let _renderEpoch = 0;
+function renderEpochSaatIni() { return _renderEpoch; }
+function masihRenderAktif(epoch) { return epoch === _renderEpoch; }
+
 function renderPage(route, param) {
   const user = Store.getUser();
+  _renderEpoch++;
   const content = document.getElementById('page-content');
   content.innerHTML = pageHeaderBar(PAGE_TITLE[route] || route) + '<div id="page-body"><div class="empty-state">Memuat...</div></div>';
   const bodyEl = document.getElementById('page-body');
@@ -155,5 +167,6 @@ function renderLogin(message) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  warmUpServer(); // jaga instance Apps Script tetap hangat sebelum pengguna menekan tombol apa pun
   if (Store.getUser() && Store.getToken()) bootApp();
 });
