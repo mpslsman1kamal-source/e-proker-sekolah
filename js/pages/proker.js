@@ -397,18 +397,44 @@ async function putuskanPerubahan(idPerubahan, keputusan) {
   if (res.success) navigateTo('antrean-perubahan');
 }
 
+/**
+ * RINCIAN ANGGARAN — alur baru:
+ * Waka mengisi RAB (kegiatan+uraian+volume+satuan, tanpa harga) -> satu kegiatan boleh
+ * punya banyak baris uraian. Bendahara memilih salah satu dari dropdown lalu mengisi
+ * HANYA harga satuan (+ sumber dana) — jumlah total otomatis.
+ */
 function renderPanelAnggaran(d, user) {
   const total = d.anggaran.reduce((s, a) => s + Number(a.total || 0), 0);
-  const bisaUbah = user.peran === 'Bendahara';
+  const isWaka = user.peran === 'Waka/Koordinator' && d.proker.id_pemilik === user.id_pengguna;
+  const isBendahara = user.peran === 'Bendahara';
+
+  let tombolAksi = '';
+  if (isWaka) tombolAksi = `<button class="btn btn-secondary btn-sm" onclick="bukaModalRab('${d.proker.id_proker}')"><span class="mi" style="font-size:14px;">add</span>Tambah Rincian</button>`;
+  else if (isBendahara) tombolAksi = `<button class="btn btn-secondary btn-sm" onclick="bukaModalHargaBendahara('${d.proker.id_proker}')"><span class="mi" style="font-size:14px;">add</span>Tambah Rincian</button>`;
+
   return `<div class="card">
-    <div class="card-header"><h3>Rincian Anggaran</h3>${bisaUbah ? `<button class="btn btn-secondary btn-sm" onclick="bukaModalAnggaran('${d.proker.id_proker}','${d.proker.id_proker && d.kegiatan[0] ? d.kegiatan[0].id_kegiatan : ''}')"><span class="mi" style="font-size:14px;">add</span>Tambah Rincian</button>` : ''}</div>
+    <div class="card-header"><h3>Rincian Anggaran (RAB)</h3>${tombolAksi}</div>
+    ${isWaka ? `<div class="card-body" style="padding-top:0;padding-bottom:0;"><p class="field-hint">Tambahkan sebanyak mungkin uraian/komponen belanja per kegiatan — harga satuan akan diisi oleh Bendahara.</p></div>` : ''}
     <div class="table-wrap"><table class="data-table">
-      <thead><tr><th>Kegiatan</th><th>Uraian</th><th class="num">Volume</th><th>Satuan</th><th class="num">Harga Satuan</th><th class="num">Total</th><th>Sumber Dana</th>${bisaUbah ? '<th></th>' : ''}</tr></thead>
+      <thead><tr><th>Kegiatan</th><th>Uraian</th><th class="num">Volume</th><th>Satuan</th><th class="num">Harga Satuan</th><th class="num">Total</th><th>Sumber Dana</th><th>Status</th><th></th></tr></thead>
       <tbody>${d.anggaran.length ? d.anggaran.map(a => {
         const keg = d.kegiatan.find(k => k.id_kegiatan === a.id_kegiatan);
-        return `<tr><td>${escapeHtml(keg ? keg.nama_kegiatan : '-')}</td><td>${escapeHtml(a.uraian)}</td><td class="num">${a.volume}</td><td>${escapeHtml(a.satuan)}</td><td class="num">${fmtRupiah(a.harga_satuan)}</td><td class="num">${fmtRupiah(a.total)}</td><td>${escapeHtml(a.sumber_dana)}</td>${bisaUbah ? `<td><button class="btn btn-danger btn-sm" onclick="hapusAnggaran('${a.id_anggaran}','${d.proker.id_proker}')">Hapus</button></td>` : ''}</tr>`;
-      }).join('') : `<tr><td colspan="8" class="empty-state">Anggaran belum disusun.</td></tr>`}</tbody>
-      <tfoot><tr><td colspan="${bisaUbah ? 5 : 5}" style="text-align:right;font-weight:700;">TOTAL</td><td class="num" style="font-weight:700;">${fmtRupiah(total)}</td><td colspan="2"></td></tr></tfoot>
+        const sudahDihargai = a.status_harga !== 'Menunggu Harga'; // baris lama tanpa kolom ini dianggap sudah dihargai
+        const statusBadge = sudahDihargai ? '<span class="badge badge-diterima">SUDAH DIHARGAI</span>' : '<span class="badge badge-diajukan">MENUNGGU HARGA</span>';
+        let aksi = '';
+        if (!sudahDihargai && isWaka && a.id_pengaju === user.id_pengguna) {
+          aksi = `<button class="btn btn-danger btn-sm" onclick="hapusAnggaranRab('${a.id_anggaran}','${d.proker.id_proker}')">Hapus</button>`;
+        } else if (sudahDihargai && isBendahara && a.id_bendahara === user.id_pengguna) {
+          aksi = `<button class="btn btn-danger btn-sm" onclick="hapusAnggaran('${a.id_anggaran}','${d.proker.id_proker}')">Hapus</button>`;
+        }
+        return `<tr>
+          <td>${escapeHtml(keg ? keg.nama_kegiatan : '-')}</td><td>${escapeHtml(a.uraian)}</td><td class="num">${a.volume}</td><td>${escapeHtml(a.satuan)}</td>
+          <td class="num">${sudahDihargai ? fmtRupiah(a.harga_satuan) : '<span class="text-muted">menunggu</span>'}</td>
+          <td class="num">${sudahDihargai ? fmtRupiah(a.total) : '<span class="text-muted">menunggu</span>'}</td>
+          <td>${escapeHtml(a.sumber_dana || '-')}</td><td>${statusBadge}</td><td>${aksi}</td>
+        </tr>`;
+      }).join('') : `<tr><td colspan="9" class="empty-state">Rincian anggaran (RAB) belum ada.${isWaka ? ' Klik "Tambah Rincian" untuk mulai menyusun.' : ''}</td></tr>`}</tbody>
+      <tfoot><tr><td colspan="5" style="text-align:right;font-weight:700;">TOTAL</td><td class="num" style="font-weight:700;">${fmtRupiah(total)}</td><td colspan="3"></td></tr></tfoot>
     </table></div>
   </div>`;
 }
